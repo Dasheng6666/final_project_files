@@ -206,6 +206,13 @@ def test_extract_patch_data_and_mask():
     assert np.isclose(mask.min(), 0.0)
     # edge 0
     assert np.all(mask[0, :, :] == 0) and np.all(mask[:, 0, :] == 0)
+    
+from network import extract_patch_data    
+def test_patch_data_shapes():
+    patch = Image.new("RGB", (64, 64), (255, 0, 0))
+    coords, rgb_values, h, w = extract_patch_data(patch)
+    assert coords.shape == (h*w, 2)
+    assert rgb_values.shape == (h*w, 3)
 
 
 # -------------------------------
@@ -276,6 +283,40 @@ def test_main_unknown_model_type_raises(tmp_path, tiny_image, monkeypatch):
             overlap=4,
             total_steps=1,
         )
+
+
+def test_main_generates_model_output(tmp_path):
+    """
+    Ensure that `main` returns the model-generated output,
+    not a direct copy of the original image.
+    This helps prevent data leakage between "training" and "test" data.
+    """
+    # 1. Create a random small test image
+    h, w = 8, 8
+    img_array = np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)
+    img_path = tmp_path / "original.png"
+    Image.fromarray(img_array).save(img_path)
+
+    # 2. Import main function (change to your module name if different)
+    from network import main  # If main is in network.py, use `from network import main`
+
+    # 3. Run main with small parameters for quick testing
+    reconstructed = main(
+        model_type="mlp",
+        image_path=str(img_path),
+        patch_size=8,
+        overlap=2,
+        total_steps=10
+    )
+
+    # 4. Validate the output
+    assert isinstance(reconstructed, np.ndarray), "Output must be a numpy array"
+    assert reconstructed.shape == (h, w, 3), "Output shape must match input image"
+    assert reconstructed.dtype == np.uint8, "Output must be uint8"
+    assert not np.array_equal(
+        reconstructed, img_array
+    ), "Output is identical to the original image — possible data leakage"
+
 if __name__ == "__main__":
     import pytest
     pytest.main([__file__])
